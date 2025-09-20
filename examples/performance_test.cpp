@@ -11,9 +11,13 @@
 
 #include <thread>
 
+constexpr double EXCELLENT_RPS_THRESHOLD = 100.0;
+constexpr double GOOD_RPS_THRESHOLD = 50.0;
+constexpr double AVERAGE_RPS_THRESHOLD = 20.0;
+
 void runPerformanceTest() {
-    const int iTotalRequests = 1000; 
-    const int iNumWorkers = std::thread::hardware_concurrency(); 
+    constexpr int iTotalRequests = 1000; 
+    constexpr int iNumWorkers = std::thread::hardware_concurrency(); 
 
     std::cout << "configuration:" << std::endl;
     std::cout << "total requests: " << iTotalRequests << std::endl;
@@ -73,11 +77,11 @@ void runPerformanceTest() {
     std::cout << std::endl;
     std::cout << "performance assessment" << std::endl;
 
-    if (dRequestsPerSecond > 100) {
+    if (dRequestsPerSecond > EXCELLENT_RPS_THRESHOLD) {
         std::cout << "excellent: " << dRequestsPerSecond << " r/s" << std::endl;
-    } else if (dRequestsPerSecond > 50) {
+    } else if (dRequestsPerSecond > GOOD_RPS_THRESHOLD) {
         std::cout << "good: " << dRequestsPerSecond << " r/s" << std::endl;
-    } else if (dRequestsPerSecond > 20) {
+    } else if (dRequestsPerSecond > AVERAGE_RPS_THRESHOLD) {
         std::cout << "avg: " << dRequestsPerSecond << " r/s" << std::endl;
     } else {
         std::cout << "slow: " << dRequestsPerSecond << " r/s" << std::endl;

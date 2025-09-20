@@ -46,6 +46,12 @@ static size_t headerCallback(char* pBuffer, size_t iSize, size_t iNmemb, std::ve
 }
 
 CWorkerPool::CWorkerPool(size_t iNumWorkers) {
+	if (!CUtils::isValidWorkerCount(iNumWorkers)) {
+		throw std::invalid_argument("Invalid worker count: " + std::to_string(iNumWorkers) + 
+			" (must be between " + std::to_string(CUtils::MIN_WORKER_COUNT) + 
+			" and " + std::to_string(CUtils::MAX_WORKER_COUNT) + ")");
+	}
+	
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	
 	pConnectionPool = std::make_unique<CConnectionPool>();
@@ -95,7 +101,7 @@ void CWorkerPool::processRequest(Request&& request) {
 		
 		if (response.isSuccess()) {
 			iSuccessfulRequests.fetch_add(1, std::memory_order_relaxed);
-		} else {
+		} else if (response.isError()) {
 			iFailedRequests.fetch_add(1, std::memory_order_relaxed);
 		}
 	}
@@ -154,6 +160,11 @@ Response CWorkerPool::executeHttpRequest(const Request& request) {
 			curl_easy_setopt(pHandle, CURLOPT_SSL_VERIFYHOST, 0L);
 			curl_easy_setopt(pHandle, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 			
+			if (!CUtils::isValidHttpMethod(strMethod)) {
+				std::cerr << "Warning: Invalid HTTP method in executeHttpRequest: " << strMethod << std::endl;
+				return;
+			}
+			
 			if (strMethod == "GET") {
 				curl_easy_setopt(pHandle, CURLOPT_HTTPGET, 1L);
 			} else if (strMethod == "POST") {
@@ -166,6 +177,10 @@ Response CWorkerPool::executeHttpRequest(const Request& request) {
 				curl_easy_setopt(pHandle, CURLOPT_POSTFIELDSIZE, strBody.length());
 			} else if (strMethod == "DELETE") {
 				curl_easy_setopt(pHandle, CURLOPT_CUSTOMREQUEST, "DELETE");
+			} else if (strMethod == "HEAD") {
+				curl_easy_setopt(pHandle, CURLOPT_NOBODY, 1L);
+			} else if (strMethod == "OPTIONS") {
+				curl_easy_setopt(pHandle, CURLOPT_CUSTOMREQUEST, "OPTIONS");
 			}
 			
 			struct curl_slist* pCurlHeaders = nullptr;
@@ -205,12 +220,70 @@ std::future<Response> CWorkerPool::submitRequestAsync(Request&& request) {
 }
 
 std::future<Response> CWorkerPool::getAsync(std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders) {
+	if (!CUtils::isValidHttpMethod("GET")) {
+		throw std::invalid_argument("Invalid HTTP method: GET");
+	}
+	
+	std::string strFullURL = CUtils::buildUrl(strURL, strEndpoint);
+	if (!CUtils::isValidUrl(strFullURL)) {
+		throw std::invalid_argument("Invalid URL: " + strFullURL);
+	}
+	
+	for (const auto& header : vecHeaders) {
+		if (!CUtils::isValidHeader(header.first, header.second)) {
+			throw std::invalid_argument("Invalid header: " + header.first + ": " + header.second);
+		}
+	}
+	
 	Request request(std::string(strURL), std::string(strEndpoint), vecHeaders, "GET", "");
 	return submitRequestAsync(std::move(request));
 }
 
 std::future<Response> CWorkerPool::postAsync(std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders, std::string_view strBody) {
+	if (!CUtils::isValidHttpMethod("POST")) {
+		throw std::invalid_argument("Invalid HTTP method: POST");
+	}
+	
+	std::string strFullURL = CUtils::buildUrl(strURL, strEndpoint);
+	if (!CUtils::isValidUrl(strFullURL)) {
+		throw std::invalid_argument("Invalid URL: " + strFullURL);
+	}
+	
+	if (!CUtils::isValidRequestSize(strBody.length())) {
+		throw std::invalid_argument("Request body too large: " + std::to_string(strBody.length()) + " bytes");
+	}
+	
+	for (const auto& header : vecHeaders) {
+		if (!CUtils::isValidHeader(header.first, header.second)) {
+			throw std::invalid_argument("Invalid header: " + header.first + ": " + header.second);
+		}
+	}
+	
 	Request request(std::string(strURL), std::string(strEndpoint), vecHeaders, "POST", std::string(strBody));
+	return submitRequestAsync(std::move(request));
+}
+
+std::future<Response> CWorkerPool::requestAsync(std::string_view strMethod, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders, std::string_view strBody) {
+	if (!CUtils::isValidHttpMethod(strMethod)) {
+		throw std::invalid_argument("Invalid HTTP method: " + std::string(strMethod));
+	}
+	
+	std::string strFullURL = CUtils::buildUrl(strURL, strEndpoint);
+	if (!CUtils::isValidUrl(strFullURL)) {
+		throw std::invalid_argument("Invalid URL: " + strFullURL);
+	}
+	
+	if (!CUtils::isValidRequestSize(strBody.length())) {
+		throw std::invalid_argument("Request body too large: " + std::to_string(strBody.length()) + " bytes");
+	}
+	
+	for (const auto& header : vecHeaders) {
+		if (!CUtils::isValidHeader(header.first, header.second)) {
+			throw std::invalid_argument("Invalid header: " + header.first + ": " + header.second);
+		}
+	}
+	
+	Request request(std::string(strURL), std::string(strEndpoint), vecHeaders, std::string(strMethod), std::string(strBody));
 	return submitRequestAsync(std::move(request));
 }
 
@@ -249,26 +322,38 @@ void CWorkerPool::postWithCallback(std::function<void(Response)> callback, std::
 }
 
 void CWorkerPool::setTimeout(std::chrono::milliseconds timeout) noexcept {
-	timeTimeout = timeout;
+	if (CUtils::isValidTimeout(timeout)) {
+		timeTimeout = timeout;
+	} else {
+		timeTimeout = std::chrono::milliseconds(1000);
+	}
 }
 
 void CWorkerPool::setMaxRetries(size_t iMaxRetries) noexcept {
-	iMaxRetries = iMaxRetries;
+	if (iMaxRetries <= 10) {
+		this->iMaxRetries = iMaxRetries;
+	} else {
+		this->iMaxRetries = 3; 
+	}
 }
 
 void CWorkerPool::setConnectionPoolSize(size_t iPoolSize) noexcept {
-	iConnectionPoolSize = iPoolSize;
+	if (iPoolSize >= 1 && iPoolSize <= 1000) {
+		iConnectionPoolSize = iPoolSize;
+	} else {
+		iConnectionPoolSize = 50; 
+	}
 }
 
-size_t CWorkerPool::getPendingRequestCount() const noexcept {
+constexpr size_t CWorkerPool::getPendingRequestCount() const noexcept {
 	return iPendingRequests.load(std::memory_order_relaxed);
 }
 
-size_t CWorkerPool::getActiveWorkerCount() const noexcept {
+constexpr size_t CWorkerPool::getActiveWorkerCount() const noexcept {
 	return vecWorkers.size();
 }
 
-bool CWorkerPool::isRunning() const noexcept {
+constexpr bool CWorkerPool::isRunning() const noexcept {
 	return !bShutdownFlag.load(std::memory_order_relaxed);
 }
 
@@ -290,8 +375,7 @@ void CWorkerPool::waitForCompletion() {
 	}
 }
 
-CPoolManager::CPoolManager(size_t iNumWorkers) 
-	: pPool(std::make_unique<CWorkerPool>(iNumWorkers)) {
+CPoolManager::CPoolManager(size_t iNumWorkers) : pPool(std::make_unique<CWorkerPool>(iNumWorkers)) {
 }
 
 CPoolManager::~CPoolManager() {

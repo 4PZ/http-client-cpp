@@ -3,6 +3,8 @@
 #include <sstream>
 #include <cctype>
 #include <iomanip>
+#include <regex>
+#include <algorithm>
 
 std::string CUtils::urlEncode(std::string_view strInput) {
 	std::ostringstream streamEncoded;
@@ -81,4 +83,74 @@ std::vector<std::pair<std::string, std::string>> CUtils::parseHeaders(std::strin
 	}
 
 	return vecHeaders;
+}
+
+bool CUtils::isValidUrl(std::string_view strUrl) noexcept {
+	if (strUrl.empty() || strUrl.length() > MAX_URL_LENGTH) {
+		return false;
+	}
+	
+	std::regex urlPattern(R"(^https?://[^\s/$.?#].[^\s]*$)");
+	return std::regex_match(strUrl.begin(), strUrl.end(), urlPattern);
+}
+
+bool CUtils::isValidHttpUrl(std::string_view strUrl) noexcept {
+	if (strUrl.empty() || strUrl.length() > MAX_URL_LENGTH) {
+		return false;
+	}
+	
+	return strUrl.substr(0, 7) == "http://" && isValidUrl(strUrl);
+}
+
+bool CUtils::isValidHttpsUrl(std::string_view strUrl) noexcept {
+	if (strUrl.empty() || strUrl.length() > MAX_URL_LENGTH) {
+		return false;
+	}
+	
+	return strUrl.substr(0, 8) == "https://" && isValidUrl(strUrl);
+}
+
+bool CUtils::isValidHeaderName(std::string_view strHeaderName) noexcept {
+	if (strHeaderName.empty() || strHeaderName.length() > MAX_HEADER_NAME_LENGTH) {
+		return false;
+	}
+	
+	for (char c : strHeaderName) {
+		if (c <= 31 || c == 127 || c == ' ' || c == ':') {
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+bool CUtils::isValidHeaderValue(std::string_view strHeaderValue) noexcept {
+	if (strHeaderValue.length() > MAX_HEADER_VALUE_LENGTH) {
+		return false;
+	}
+	
+	for (char c : strHeaderValue) {
+		if ((c <= 31 && c != 9) || c == 127) {
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+bool CUtils::isValidHeader(std::string_view strHeaderName, std::string_view strHeaderValue) noexcept {
+	return isValidHeaderName(strHeaderName) && isValidHeaderValue(strHeaderValue);
+}
+
+bool CUtils::isValidRequestSize(size_t iSize) noexcept {
+	return iSize <= MAX_REQUEST_BODY_SIZE;
+}
+
+bool CUtils::isValidTimeout(std::chrono::milliseconds timeout) noexcept {
+	auto timeoutMs = timeout.count();
+	return timeoutMs >= MIN_TIMEOUT_MS && timeoutMs <= MAX_TIMEOUT_MS;
+}
+
+bool CUtils::isValidWorkerCount(size_t iWorkerCount) noexcept {
+	return iWorkerCount >= MIN_WORKER_COUNT && iWorkerCount <= MAX_WORKER_COUNT;
 }

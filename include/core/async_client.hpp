@@ -18,6 +18,7 @@
 #include <functional>
 
 #include <curl/curl.h>
+#include "utils/utils.hpp"
 
 struct Response {
 	unsigned int iStatusCode{0};
@@ -27,12 +28,16 @@ struct Response {
 	std::chrono::high_resolution_clock::time_point timeRequestTime;
 	std::chrono::high_resolution_clock::time_point timeResponseTime;
 	
-	bool isSuccess() const noexcept {
-		return iStatusCode >= 200 && iStatusCode < 300;
+	constexpr bool isSuccess() const noexcept {
+		return CUtils::isSuccessStatusCode(iStatusCode);
 	}
 	
-	bool isError() const noexcept {
-		return iStatusCode >= 400;
+	constexpr bool isError() const noexcept {
+		return CUtils::isErrorStatusCode(iStatusCode);
+	}
+	
+	constexpr bool isRedirect() const noexcept {
+		return CUtils::isRedirectStatusCode(iStatusCode);
 	}
 	
 	std::chrono::milliseconds getDuration() const noexcept {
@@ -257,6 +262,7 @@ public:
 	
 	std::future<Response> getAsync(std::string_view strURL, std::string_view strEndpoint,const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
 	std::future<Response> postAsync(std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
+	std::future<Response> requestAsync(std::string_view strMethod, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
 	
 	void getWithCallback(std::function<void(Response)> callback, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
 	void postWithCallback(std::function<void(Response)> callback, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
@@ -265,9 +271,9 @@ public:
 	void setMaxRetries(size_t iMaxRetries) noexcept;
 	void setConnectionPoolSize(size_t iPoolSize) noexcept;
 	
-	size_t getPendingRequestCount() const noexcept;
-	size_t getActiveWorkerCount() const noexcept;
-	bool isRunning() const noexcept;
+	constexpr size_t getPendingRequestCount() const noexcept;
+	constexpr size_t getActiveWorkerCount() const noexcept;
+	constexpr bool isRunning() const noexcept;
 	
 	void shutdown();
 	void waitForCompletion();
