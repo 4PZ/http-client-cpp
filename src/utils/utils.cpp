@@ -1,10 +1,10 @@
 #include "utils/utils.hpp"
 
-#include <sstream>
+#include <algorithm>
 #include <cctype>
 #include <iomanip>
 #include <regex>
-#include <algorithm>
+#include <sstream>
 
 std::string CUtils::urlEncode(std::string_view strInput) {
 	std::ostringstream streamEncoded;

@@ -16,13 +16,13 @@ constexpr double GOOD_RPS_THRESHOLD = 50.0;
 constexpr double AVERAGE_RPS_THRESHOLD = 20.0;
 
 void runPerformanceTest() {
-    constexpr int iTotalRequests = 1000; 
-    constexpr int iNumWorkers = std::thread::hardware_concurrency(); 
+    constexpr int iTotalRequests = 1000000; 
+    const int iNumWorkers = std::thread::hardware_concurrency(); 
 
     std::cout << "configuration:" << std::endl;
     std::cout << "total requests: " << iTotalRequests << std::endl;
     std::cout << "worker threads: " << iNumWorkers << std::endl;
-    std::cout << "target: https://instagram.com/ajax/bz" << std::endl;
+    std::cout << "target: https://instagram.com/ajax/bz/" << std::endl;
     std::cout << std::endl;
     
     CWorkerPool pool(iNumWorkers);
@@ -32,7 +32,7 @@ void runPerformanceTest() {
 
     std::vector<std::pair<std::string, std::string>> vecHeaders;
     // not giving these ones 
-    vecHeaders.push_back(std::make_pair("Cookie", "shbid=xXXx;shbts=xXxX"));
+    vecHeaders.push_back(std::make_pair("Cookie", "shbid=9985;shbts=1"));
 
     auto timeStartTime = std::chrono::high_resolution_clock::now();
     
@@ -40,7 +40,7 @@ void runPerformanceTest() {
     vecFutures.reserve(iTotalRequests);
     
     for (int i = 0; i < iTotalRequests; ++i) {
-        auto future = pool.getAsync("https://instagram.com/", "ajax/bz", vecHeaders);
+        auto future = pool.getAsync("https://instagram.com", "/ajax/bz/");
         vecFutures.push_back(std::move(future));
     }
     

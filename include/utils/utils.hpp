@@ -1,13 +1,14 @@
-#pragma once
+#ifndef HTTP_CLIENT_CPP_INCLUDE_UTILS_UTILS_H_
+#define HTTP_CLIENT_CPP_INCLUDE_UTILS_UTILS_H_
 
+#include <chrono>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-#include <utility>
-
 class CUtils {
-public: // jaka glupota nmg
+ public:
 	static std::string urlEncode(std::string_view strInput);
 	static std::string urlDecode(std::string_view strInput);
 	static std::string buildUrl(std::string_view strBase, std::string_view strEndpoint);
@@ -52,3 +53,5 @@ public: // jaka glupota nmg
 	static constexpr size_t MIN_WORKER_COUNT = 1;
 	static constexpr size_t MAX_WORKER_COUNT = 100;
 };
+
+#endif  // HTTP_CLIENT_CPP_INCLUDE_UTILS_UTILS_H_

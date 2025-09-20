@@ -1,23 +1,21 @@
-#pragma once
+#ifndef HTTP_CLIENT_CPP_INCLUDE_CORE_ASYNC_CLIENT_H_
+#define HTTP_CLIENT_CPP_INCLUDE_CORE_ASYNC_CLIENT_H_
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
-#include <chrono>
-
-#include <future>
-#include <queue>
-#include <atomic>
-#include <mutex>
-#include <condition_variable>
-
-#include <thread>
-#include <memory>
-
-#include <functional>
-
 #include <curl/curl.h>
+
 #include "utils/utils.hpp"
 
 struct Response {
@@ -47,10 +45,10 @@ struct Response {
 	}
 	
 	Response() = default;
-	Response(Response&&) = default;
-	Response& operator=(Response&&) = default;
 	Response(const Response&) = default;
 	Response& operator=(const Response&) = default;
+	Response(Response&&) = default;
+	Response& operator=(Response&&) = default;
 };
 
 struct Request {
@@ -74,12 +72,12 @@ struct Request {
 };
 
 class CFastQueue {
-private:
+ private:
 	std::queue<Request> queueRequests;
 	mutable std::mutex mutexQueue;
 	std::condition_variable conditionQueue;
 	
-public:
+ public:
 	CFastQueue() = default;
 	~CFastQueue() = default;
 	
@@ -141,7 +139,7 @@ public:
 };
 
 class CConnectionPool {
-private:
+ private:
 	struct Connection {
 		CURL* pHandle{nullptr};
 		std::string strHost;
@@ -182,14 +180,15 @@ private:
 		}
 	};
 	
-	static constexpr size_t MAX_CONNECTIONS_PER_HOST = 10;
-	static constexpr size_t MAX_TOTAL_CONNECTIONS = 100;
+	// customizable
+	static constexpr size_t MAX_CONNECTIONS_PER_HOST = 50;
+	static constexpr size_t MAX_TOTAL_CONNECTIONS = 500;   
 	
 	std::vector<std::unique_ptr<Connection>> vecConnections;
 	std::mutex mutexConnections;
 	std::atomic<size_t> iTotalConnections{0};
 	
-public:
+ public:
 	CConnectionPool() {
 		vecConnections.reserve(MAX_TOTAL_CONNECTIONS);
 	}
@@ -248,7 +247,7 @@ public:
 };
 
 class CWorkerPool {
-public:
+ public:
 	explicit CWorkerPool(size_t iNumWorkers = std::thread::hardware_concurrency());
 	~CWorkerPool();
 	
@@ -260,25 +259,41 @@ public:
 	void submitRequest(Request&& request);
 	std::future<Response> submitRequestAsync(Request&& request);
 	
-	std::future<Response> getAsync(std::string_view strURL, std::string_view strEndpoint,const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
-	std::future<Response> postAsync(std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
-	std::future<Response> requestAsync(std::string_view strMethod, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
+	std::future<Response> getAsync(std::string_view strURL, 
+	                               std::string_view strEndpoint,
+	                               const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
+	std::future<Response> postAsync(std::string_view strURL, 
+	                                std::string_view strEndpoint, 
+	                                const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, 
+	                                std::string_view strBody = "");
+	std::future<Response> requestAsync(std::string_view strMethod, 
+	                                   std::string_view strURL, 
+	                                   std::string_view strEndpoint, 
+	                                   const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, 
+	                                   std::string_view strBody = "");
 	
-	void getWithCallback(std::function<void(Response)> callback, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
-	void postWithCallback(std::function<void(Response)> callback, std::string_view strURL, std::string_view strEndpoint, const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, std::string_view strBody = "");
+	void getWithCallback(std::function<void(Response)> callback, 
+	                      std::string_view strURL, 
+	                      std::string_view strEndpoint, 
+	                      const std::vector<std::pair<std::string, std::string>>& vecHeaders = {});
+	void postWithCallback(std::function<void(Response)> callback, 
+	                       std::string_view strURL, 
+	                       std::string_view strEndpoint, 
+	                       const std::vector<std::pair<std::string, std::string>>& vecHeaders = {}, 
+	                       std::string_view strBody = "");
 	
 	void setTimeout(std::chrono::milliseconds timeout) noexcept;
 	void setMaxRetries(size_t iMaxRetries) noexcept;
 	void setConnectionPoolSize(size_t iPoolSize) noexcept;
 	
-	constexpr size_t getPendingRequestCount() const noexcept;
-	constexpr size_t getActiveWorkerCount() const noexcept;
-	constexpr bool isRunning() const noexcept;
+	size_t getPendingRequestCount() const noexcept;
+	size_t getActiveWorkerCount() const noexcept;
+	bool isRunning() const noexcept;
 	
 	void shutdown();
 	void waitForCompletion();
 	
-private:
+ private:
 	void workerLoop(size_t iWorkerId);
 	void processRequest(Request&& request);
 	Response executeHttpRequest(const Request& request);
@@ -303,13 +318,15 @@ private:
 extern std::unique_ptr<CWorkerPool> pGlobalPool;
 
 class CPoolManager {
-public:
+ public:
 	explicit CPoolManager(size_t iNumWorkers = std::thread::hardware_concurrency());
 	~CPoolManager();
 	
 	CWorkerPool& getPool() noexcept { return *pPool; }
 	const CWorkerPool& getPool() const noexcept { return *pPool; }
 	
-private:
+ private:
 	std::unique_ptr<CWorkerPool> pPool;
 };
+
+#endif  // HTTP_CLIENT_CPP_INCLUDE_CORE_ASYNC_CLIENT_H_
